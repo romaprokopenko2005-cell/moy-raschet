@@ -54,7 +54,7 @@ M.VIEWS.plan = function(){
       (done ? 'Месяц завершён: потрачено ' + rub0(spent) + '.' : 'Сейчас ' + el + '-е число, потрачено ' + rub0(spent) + '. При нынешнем темпе (' + rub0(spent / el) + ' в день) к концу месяца выйдет около ' + rub0(forecast) + '.') +
       (diff !== null ? ' Это <span class="' + (diff > 0 ? 'up' : 'down') + '">на ' + Math.abs(diff).toFixed(0) + '% ' + (diff > 0 ? 'больше' : 'меньше') + '</span>, чем за ' + M.MONTHS[M.parseD(pr.s).getMonth()] + ' (' + rub0(prevSpent) + ').' : '') + '</p>' +
       '<div class="chartbox" style="height:200px;margin-top:10px"><canvas id="cFc"></canvas></div>' +
-      '<div class="chips" style="margin-top:6px"><span class="chip"><span class="dot" style="background:#141413"></span>Этот месяц</span>' + (done ? '' : '<span class="chip"><span class="dot" style="background:#b9832f"></span>Прогноз</span>') + '<span class="chip"><span class="dot" style="background:#cfcabf"></span>Прошлый месяц</span></div>' +
+      '<div class="chips" style="margin-top:6px;flex-wrap:wrap"><span class="chip"><span class="dot" style="background:#141413"></span>Этот месяц</span>' + (done ? '' : '<span class="chip"><span class="dot" style="background:#b9832f"></span>Прогноз</span>') + '<span class="chip"><span class="dot" style="background:#cfcabf"></span>Прошлый месяц</span></div>' +
       (M.dataMax() < M.todayS() && !done ? '<div class="note">Выписка заканчивается ' + M.fmtD(M.dataMax()) + ' — прогноз по этой дате. Загрузите новую выписку, чтобы уточнить.</div>' : '');
   }
   h += '</div>';
@@ -166,7 +166,7 @@ M.VIEWS.insights = function(){
   $('#v-insights').innerHTML = h;
   $$('#v-insights [data-tb]').forEach(function(b){ b.onclick = function(){ topBy = b.dataset.tb; M.render(); }; });
   $$('#v-insights [data-cm]').forEach(function(b){ b.onclick = function(){ cmpMode = b.dataset.cm; M.render(); }; });
-  $$('#v-insights [data-merch]').forEach(function(b){ b.onclick = function(){ merchSheet(b.dataset.merch, b.dataset.scope === 'all' ? S().tx : list, b.dataset.scope === 'all' ? 'Вся история' : M.label(P.mode, P.anchor)); }; });
+  $$('#v-insights [data-merch]').forEach(function(b){ b.onclick = function(){ merchSheet(b.dataset.merch, b.dataset.scope === 'all' ? M.VT() : list, b.dataset.scope === 'all' ? 'Вся история' : M.label(P.mode, P.anchor)); }; });
   $$('#v-insights [data-hc]').forEach(function(b){ b.onclick = function(){ var p = b.dataset.hc.split('|'); $('#heatInfo').innerHTML = '<b>' + M.WD[+p[0]] + ', ' + HB[+p[1]] + '</b>: ' + rub0(+p[2]) + ' · ' + p[3] + ' покупок'; }; });
   $$('#v-insights [data-go-day]').forEach(function(b){ b.onclick = function(){ P.mode = 'day'; P.anchor = b.dataset.goDay; P.view = 'overview'; M.render(); window.scrollTo(0, 0); }; });
   habitsChart(list);
@@ -204,7 +204,7 @@ function median(a){ var b = a.slice().sort(function(x, y){ return x - y; }), m =
 var NOT_SUB = /Самокаты|Такси|Каршеринг|Продукты|Кафе|Алкоголь|Транспорт|Зарядки|Покупки|Прочие/;
 function detectSubs(){
   var g = {};
-  S().tx.forEach(function(t){ if (t.kind !== 'purchase') return; var k = t.merchant + '|' + Math.round(-t.amount); (g[k] = g[k] || []).push(t); });
+  M.VT().forEach(function(t){ if (t.kind !== 'purchase') return; var k = t.merchant + '|' + Math.round(-t.amount); (g[k] = g[k] || []).push(t); });
   var out = [];
   Object.keys(g).forEach(function(k){
     var ops = g[k].sort(function(a, b){ return a.date < b.date ? -1 : 1; });
@@ -293,7 +293,7 @@ M.VIEWS.data = function(){
     cats.map(function(c){ return '<button class="chip" data-cc="' + esc(c) + '"><span class="dot" style="background:' + M.color(c) + '"></span>' + esc(c) + '</button>'; }).join('') + '</div>' +
     '<div class="stack"><input id="ncName" type="text" maxlength="30" placeholder="Новая категория, например «Работа»"><div class="colors" id="ncCol">' + PALETTE.map(function(p, i){ return '<button data-pc="' + p + '" class="' + (i === 0 ? 'on' : '') + '" style="background:' + p + '" aria-label="Цвет ' + (i + 1) + '"></button>'; }).join('') + '</div><button class="btn ghost" id="ncAdd">Добавить категорию</button></div>' +
     '<p class="muted" style="margin:0">Чтобы отнести операцию к новой категории, откройте её во вкладке «Операции».</p></div>' +
-    '<div class="card"><h2>Другие банки</h2><p class="muted" style="margin:0">Сейчас читаются PDF-выписки Т-Банка. Чтобы добавить Сбербанк или другой банк, нужен пример его выписки — пришлите её в чат, и я добавлю формат.</p></div>';
+    '<div class="card"><h2>Другие банки</h2><p class="muted" style="margin:0">Сейчас читаются PDF-выписки Т-Банка (личная карта) и Альфа-Банка (выписка по расчётному счёту). Каждый счёт хранится отдельно — переключатель счетов появляется над периодом. Для Сбербанка нужен пример выписки.</p></div>';
   var grid = $('#v-data .grid'); var tmp = document.createElement('div'); tmp.innerHTML = card;
   var anchor = grid.children[2] || null;
   while (tmp.firstChild) grid.insertBefore(tmp.firstChild, anchor);

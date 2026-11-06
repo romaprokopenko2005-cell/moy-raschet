@@ -26,7 +26,13 @@ function openDB(){
 function dbGet(k){ return new Promise(function(res){ if(!DB) return res(mem[k]); var t = DB.transaction('kv').objectStore('kv').get(k); t.onsuccess = function(){ res(t.result); }; t.onerror = function(){ res(undefined); }; }); }
 function dbSet(k, v){ return new Promise(function(res, rej){ if(!DB){ mem[k] = v; return res(); } var tr = DB.transaction('kv', 'readwrite'); tr.objectStore('kv').put(v, k); tr.oncomplete = function(){ res(); }; tr.onerror = function(){ rej(tr.error); }; }); }
 
-var S = { tx: [], rules: {}, overrides: {}, names: {}, imports: [], limits: {}, goals: [], customCats: [], catColors: {} };
+var S = { tx: [], rules: {}, overrides: {}, names: {}, imports: [], limits: {}, goals: [], customCats: [], catColors: {}, accounts: {}, accSel: 'all' };
+/* ---------- счета: Т-Банк, Альфа и т. д. ---------- */
+function accOf(t){ return t.acc || 'tbank'; }
+function accLabel(id){ return (S.accounts && S.accounts[id]) || (id === 'tbank' ? 'Т-Банк' : id); }
+function accList(){ var seen = {}; S.tx.forEach(function(t){ seen[accOf(t)] = (seen[accOf(t)] || 0) + 1; }); return Object.keys(seen).map(function(id){ return { id: id, n: seen[id], label: accLabel(id) }; }).sort(function(a, b){ return a.id === 'tbank' ? -1 : b.id === 'tbank' ? 1 : b.n - a.n; }); }
+var vtc = { k: null, v: [] };
+function VT(){ var sel = S.accSel || 'all'; if (sel !== 'all' && !S.tx.some(function(t){ return accOf(t) === sel; })) sel = S.accSel = 'all'; var k = S.tx.length + '|' + sel + '|' + (S.tx[0] && S.tx[0].id) + '|' + (S.tx.length && S.tx[S.tx.length - 1].id); if (vtc.k === k && vtc.src === S.tx) return vtc.v; vtc = { k: k, src: S.tx, v: sel === 'all' ? S.tx : S.tx.filter(function(t){ return accOf(t) === sel; }) }; return vtc.v; }
 var DEFAULT_OVERRIDES = {};
 function preset(t){ return t.date === '2026-11-02' && t.time === '07:52' && t.amount === -990 && /Сервисы Яндекса/.test(t.desc) ? 'Подписки' : null; }
 function save(){ return dbSet('state', S).catch(function(e){ toast('Не удалось сохранить: ' + e); }); }
@@ -41,7 +47,7 @@ function enrich(t){
   t.cat = S.overrides[t.id] || preset(t) || S.rules[t.merchant] || (SPEND[t.kind] ? Cat.category(t.desc) : t.kind === 'cash_out' ? 'Наличные' : 'Переводы');
   t.spend = SPEND[t.kind] ? -t.amount : 0;
 }
-function keyOf(t){ return t.date + '|' + t.time + '|' + t.amount + '|' + t.desc + '|' + t.card; }
+function keyOf(t){ return t.date + '|' + t.time + '|' + t.amount + '|' + t.desc + '|' + t.card + (t.acc ? '|' + t.acc : ''); }
 function mergeTx(newTx){
   var have = {}, add = [], seen = {};
   S.tx.forEach(function(t){ var k = keyOf(t); have[k] = (have[k] || 0) + 1; });
@@ -82,10 +88,10 @@ function label(mode, anchor){
   if (mode === 'year') return s.getFullYear() + ' год';
   return 'Вся история';
 }
-function dataMin(){ return S.tx.length ? S.tx.reduce(function(m, t){ return t.date < m ? t.date : m; }, '9999') : todayS(); }
-function dataMax(){ return S.tx.length ? S.tx.reduce(function(m, t){ return t.date > m ? t.date : m; }, '0000') : todayS(); }
-function inR(r){ return S.tx.filter(function(t){ return t.date >= r.s && t.date <= r.e; }); }
-function coverage(r){ var a = dataMin(), b = dataMax(); if (!S.tx.length || r.e < a || r.s > b) return 'none'; return (r.s < a || r.e > b) ? 'partial' : 'full'; }
+function dataMin(){ var X = VT(); return X.length ? X.reduce(function(m, t){ return t.date < m ? t.date : m; }, '9999') : todayS(); }
+function dataMax(){ var X = VT(); return X.length ? X.reduce(function(m, t){ return t.date > m ? t.date : m; }, '0000') : todayS(); }
+function inR(r){ return VT().filter(function(t){ return t.date >= r.s && t.date <= r.e; }); }
+function coverage(r){ var a = dataMin(), b = dataMax(); if (!VT().length || r.e < a || r.s > b) return 'none'; return (r.s < a || r.e > b) ? 'partial' : 'full'; }
 
 /* ---------- агрегаты ---------- */
 function sumSpend(list){ return list.reduce(function(s, t){ return s + t.spend; }, 0); }
@@ -123,6 +129,9 @@ function renderPeriod(){
   var isToday = P.mode === 'day' && P.anchor === todayS();
   $('#today').classList.toggle('is', isToday);
   $('#periodBar').hidden = P.view === 'data';
+  var al = accList(), ab = $('#accBar');
+  ab.hidden = al.length < 2 || P.view === 'data';
+  if (!ab.hidden) ab.innerHTML = [{ id: 'all', label: 'Все счета' }].concat(al).map(function(a){ return '<button data-acc="' + esc(a.id) + '" class="' + ((S.accSel || 'all') === a.id ? 'on' : '') + '">' + esc(a.label) + '</button>'; }).join('');
   $('#goData').classList.toggle('on', P.view === 'data');
 }
 var VIEWS = {};
@@ -130,7 +139,7 @@ function render(){
   renderPeriod();
   $$('.tabs button').forEach(function(b){ b.classList.toggle('on', b.dataset.view === P.view); });
   $$('.view').forEach(function(v){ v.hidden = v.id !== 'v-' + P.view; });
-  if (!S.tx.length && P.view !== 'data'){ renderEmpty(); return; }
+  if (!VT().length && P.view !== 'data'){ renderEmpty(); return; }
   (VIEWS[P.view] || renderOverview)();
 }
 function renderEmpty(){
@@ -362,10 +371,12 @@ function opSheet(id){
 var pending = null;
 function renderData(){
   var h = '<div class="grid"><div class="card stack"><h2>Загрузить выписку</h2>' +
-    '<label class="drop"><input type="file" id="file" accept="application/pdf,.pdf"><b>Выбрать PDF-выписку</b><span class="muted">Т-Банк → «Справка о движении средств». Файл обрабатывается только на этом устройстве.</span></label>' +
+    '<label class="drop"><input type="file" id="file" accept="application/pdf,.pdf"><b>Выбрать PDF-выписку</b><span class="muted">Т-Банк → «Справка о движении средств» или Альфа-Банк → «Выписка по счёту». Файл обрабатывается только на этом устройстве.</span></label>' +
     '<div id="imp"></div></div>';
   h += '<div class="card"><h2>Загружено</h2>' + (S.tx.length ? '<p>' + S.tx.length.toLocaleString('ru-RU') + ' операций, с ' + fmtD(dataMin()) + ' по ' + fmtD(dataMax()) + '.</p>' : '<p class="muted">Пока ничего.</p>') +
     (S.imports.length ? '<div class="rows">' + S.imports.slice().reverse().map(function(i){ return '<div class="row"><span></span><span class="name">' + esc(i.name) + '</span><span class="amt">+' + i.added + '</span><span class="meta">' + esc(i.period || '') + ' · добавлено ' + new Date(i.at).toLocaleDateString('ru-RU') + '</span></div>'; }).join('') + '</div>' : '') + '</div>';
+  var al = accList();
+  if (al.length > 1 || (al.length && al[0].id !== 'tbank')) h += '<div class="card"><h2>Счета</h2><div class="rows">' + al.map(function(a){ return '<div class="row"><span></span><span class="name">' + esc(a.label) + '</span><span class="amt"><button class="btn ghost sm" data-delacc="' + esc(a.id) + '">Удалить</button></span><span class="meta">' + a.n.toLocaleString('ru-RU') + ' операций</span></div>'; }).join('') + '</div><div class="note">Счета не смешиваются: сверху на экранах можно выбрать «Все счета» или нужный.</div></div>';
   h += '<div class="card stack"><h2>Резервная копия</h2><p class="muted" style="margin:0">Данные хранятся только на этом устройстве. Сохраните копию в «Файлы» — с ней можно восстановить всё на другом телефоне или компьютере.</p>' +
     '<input type="password" id="bpw" placeholder="Пароль для копии (по желанию)" autocomplete="new-password">' +
     '<button class="btn" id="bExp"' + (S.tx.length ? '' : ' disabled') + '>Сохранить резервную копию</button>' +
@@ -376,9 +387,13 @@ function renderData(){
   $('#file').onchange = function(){ if (this.files[0]) importPdf(this.files[0]); this.value = ''; };
   $('#bExp').onclick = exportBackup;
   $('#bImp').onchange = function(){ if (this.files[0]) importBackup(this.files[0]); this.value = ''; };
+  $$('[data-delacc]').forEach(function(b){ b.onclick = function(){ var id = b.dataset.delacc;
+    sheet('<h3>Удалить счёт «' + esc(accLabel(id)) + '»?</h3><p class="muted">Удалятся только операции этого счёта. Остальные останутся.</p><div class="stack"><button class="btn danger" id="delAccY">Да, удалить</button><button class="btn ghost" data-close>Отмена</button></div>');
+    $('#delAccY').onclick = function(){ var n = S.tx.length; S.tx = S.tx.filter(function(t){ return accOf(t) !== id; }); S.imports = S.imports.filter(function(i){ return (i.acc || 'tbank') !== id; }); if (S.accSel === id) S.accSel = 'all'; save(); closeSheet(); render(); toast('Удалено ' + (n - S.tx.length) + ' операций'); };
+  }; });
   $('#wipe').onclick = function(){
     sheet('<h3>Удалить все данные?</h3><p class="muted">Операции, категории и подписи будут удалены с этого устройства. Отменить нельзя.</p><div class="stack"><button class="btn danger" id="wipeY">Да, удалить</button><button class="btn ghost" data-close>Отмена</button></div>');
-    $('#wipeY').onclick = function(){ S = { tx: [], rules: {}, overrides: {}, names: {}, imports: [], limits: {}, goals: [], customCats: [], catColors: {} }; save(); closeSheet(); render(); toast('Данные удалены'); };
+    $('#wipeY').onclick = function(){ S = { tx: [], rules: {}, overrides: {}, names: {}, imports: [], limits: {}, goals: [], customCats: [], catColors: {}, accounts: {}, accSel: 'all' }; save(); closeSheet(); render(); toast('Данные удалены'); };
   };
   if (navigator.storage && navigator.storage.persisted) navigator.storage.persisted().then(function(p){ var e = $('#persist'); if (e) e.textContent = p ? 'Хранилище защищено от автоматической очистки.' : 'Совет: добавьте приложение на экран «Домой» — так данные надёжнее сохраняются.'; });
 }
@@ -387,29 +402,31 @@ function importPdf(file){
   box.innerHTML = '<p class="muted">Читаю выписку… Большой файл может обрабатываться до минуты.</p>';
   if (!window.pdfjsLib){ box.innerHTML = '<p class="bad">Модуль чтения PDF не загрузился. Обновите страницу.</p>'; return; }
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
-  file.arrayBuffer().then(function(buf){ return TbankParser.parseTbankPdf(pdfjsLib, new Uint8Array(buf)); }).then(function(res){
+  file.arrayBuffer().then(function(buf){ return TbankParser.parseAnyPdf(pdfjsLib, new Uint8Array(buf)); }).then(function(res){
     var add = mergeTx(res.tx);
     var dup = res.tx.length - add.length;
     var ai = add.filter(function(t){ return t.amount > 0; }).reduce(function(s, t){ return s + t.amount; }, 0), ao = add.filter(function(t){ return t.amount < 0; }).reduce(function(s, t){ return s - t.amount; }, 0);
-    pending = { add: add, name: file.name, period: res.period ? res.period.join(' – ') : '' };
+    pending = { add: add, name: file.name, period: res.period ? res.period.join(' – ') : '', acc: res.acc };
     box.innerHTML = '<div class="note" style="background:#fff;border:1px solid var(--line)">' +
-      '<b>' + esc(file.name) + '</b><br>Период: ' + esc(pending.period || 'не указан') + '<br>Операций в файле: ' + res.tx.length +
+      '<b>' + esc(file.name) + '</b><br>Счёт: ' + esc(res.acc ? res.acc.label : 'Т-Банк') + '<br>Период: ' + esc(pending.period || 'не указан') + '<br>Операций в файле: ' + res.tx.length +
       '<br>Сверка с итогами банка: ' + (res.ok ? '<span class="ok">совпадает ✓</span> (поступления ' + rub(res.totals.in) + ', расходы ' + rub(res.totals.out) + ')' : res.totals.in != null ? '<span class="bad">не совпадает</span> — банк: +' + rub(res.totals.in) + ' / −' + rub(res.totals.out) + ', прочитано: +' + rub(res.parsed.in) + ' / −' + rub(res.parsed.out) : '<span class="bad">итогов в файле не найдено</span>') +
       '<br><b>Новых операций: ' + add.length + '</b>' + (dup ? ' · уже были загружены: ' + dup + ' (повторно не добавляются)' : '') +
       (add.length ? '<br>Новые: +' + rub0(ai) + ' поступлений, −' + rub0(ao) + ' списаний' : '') + '</div>' +
       (add.length ? '<button class="btn wide" id="impGo" style="margin-top:10px">Добавить ' + add.length + ' операций</button>' : '<p class="muted">Всё из этого файла уже есть в приложении.</p>');
     var g = $('#impGo'); if (g) g.onclick = commitImport;
-  }).catch(function(e){ box.innerHTML = '<p class="bad">Не удалось прочитать файл: ' + esc(e.message || e) + '</p><p class="muted">Нужна PDF-выписка Т-Банка «Справка о движении средств».</p>'; });
+  }).catch(function(e){ box.innerHTML = '<p class="bad">Не удалось прочитать файл: ' + esc(e.message || e) + '</p><p class="muted">Подходят PDF-выписки Т-Банка («Справка о движении средств») и Альфа-Банка («Выписка по счёту»).</p>'; });
 }
 function commitImport(){
   if (!pending) return;
   pending.add.forEach(enrich);
   S.tx = S.tx.concat(pending.add);
-  S.imports.push({ name: pending.name, period: pending.period, added: pending.add.length, at: Date.now() });
-  var n = pending.add.length; pending = null;
+  if (pending.acc){ S.accounts = S.accounts || {}; S.accounts[pending.acc.id] = pending.acc.label; }
+  S.imports.push({ name: pending.name, period: pending.period, added: pending.add.length, at: Date.now(), acc: pending.acc ? pending.acc.id : 'tbank' });
+  var hadOther = pending.acc && S.tx.some(function(t){ return accOf(t) !== pending.acc.id; });
+  var n = pending.add.length, pending0acc = pending.acc ? pending.acc.id : 'all'; pending = null;
   save().then(function(){
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
-    P.anchor = dataMax(); P.mode = 'month'; P.view = 'overview'; render(); window.scrollTo(0, 0);
+    if (hadOther) S.accSel = pending0acc; P.anchor = dataMax(); P.mode = 'month'; P.view = 'overview'; render(); window.scrollTo(0, 0);
     toast('Добавлено ' + n + ' операций. Не забудьте сохранить резервную копию.');
   });
 }
@@ -417,7 +434,7 @@ function commitImport(){
 function b64(buf){ var s = '', a = new Uint8Array(buf); for (var i = 0; i < a.length; i += 8192) s += String.fromCharCode.apply(null, a.subarray(i, i + 8192)); return btoa(s); }
 function unb64(s){ var b = atob(s), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
 function keyFrom(pw, salt){ var enc = new TextEncoder(); return crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveKey']).then(function(k){ return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 250000, hash: 'SHA-256' }, k, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']); }); }
-function slim(){ return { v: 1, tx: S.tx.map(function(t){ return { id: t.id, date: t.date, time: t.time, amount: t.amount, desc: t.desc, card: t.card }; }), rules: S.rules, overrides: S.overrides, names: S.names, imports: S.imports, limits: S.limits, goals: S.goals, customCats: S.customCats, catColors: S.catColors }; }
+function slim(){ return { v: 1, tx: S.tx.map(function(t){ var o = { id: t.id, date: t.date, time: t.time, amount: t.amount, desc: t.desc, card: t.card }; if (t.acc) o.acc = t.acc; return o; }), accounts: S.accounts, rules: S.rules, overrides: S.overrides, names: S.names, imports: S.imports, limits: S.limits, goals: S.goals, customCats: S.customCats, catColors: S.catColors }; }
 function exportBackup(){
   var pw = $('#bpw').value, json = JSON.stringify(slim());
   var done = function(text){
@@ -444,11 +461,11 @@ function importBackup(file){
     return o;
   }).then(function(o){
     if (!o || !Array.isArray(o.tx)) throw new Error('Это не резервная копия «Моего расчёта».');
-    var add = mergeTx(o.tx.map(function(t){ return { date: t.date, time: t.time, amount: t.amount, desc: t.desc, card: t.card }; }));
+    var add = mergeTx(o.tx.map(function(t){ var x = { date: t.date, time: t.time, amount: t.amount, desc: t.desc, card: t.card }; if (t.acc) x.acc = t.acc; return x; }));
     add.forEach(enrich); S.tx = S.tx.concat(add);
     Object.assign(S.rules, o.rules || {}); Object.assign(S.overrides, o.overrides || {}); Object.assign(S.names, o.names || {});
     S.imports = S.imports.concat(o.imports || []);
-    Object.assign(S.limits, o.limits || {}); Object.assign(S.catColors, o.catColors || {});
+    Object.assign(S.limits, o.limits || {}); S.accounts = Object.assign(S.accounts || {}, o.accounts || {}); Object.assign(S.catColors, o.catColors || {});
     (o.goals || []).forEach(function(g){ if (!S.goals.some(function(x){ return x.id === g.id; })) S.goals.push(g); });
     (o.customCats || []).forEach(function(g){ if (!S.customCats.some(function(x){ return x.name === g.name; })) S.customCats.push(g); });
     S.tx.forEach(enrich);
@@ -459,6 +476,7 @@ function importBackup(file){
 VIEWS.overview = renderOverview; VIEWS.transfers = renderTransfers; VIEWS.ops = renderOps; VIEWS.data = renderData;
 /* ---------- события ---------- */
 $$('.seg button').forEach(function(b){ b.onclick = function(){ P.mode = b.dataset.mode; render(); }; });
+$('#accBar').onclick = function(e){ var b = e.target.closest('[data-acc]'); if (!b) return; S.accSel = b.dataset.acc; save(); var mx = dataMax(); if (P.anchor > mx) P.anchor = mx; render(); };
 $('#prev').onclick = function(){ P.anchor = shift(P.mode, P.anchor, -1); render(); };
 $('#next').onclick = function(){ P.anchor = shift(P.mode, P.anchor, 1); render(); };
 $('#today').onclick = function(){ P.mode = 'day'; P.anchor = todayS(); if (P.view === 'data') P.view = 'overview'; render(); };
@@ -471,7 +489,7 @@ document.addEventListener('touchend', function(e){ if (!sx || P.mode === 'all' |
 /* ---------- запуск ---------- */
 openDB().then(function(){ return dbGet('state'); }).then(function(st){
   if (st && st.tx){ S = st; S.rules = S.rules || {}; S.overrides = S.overrides || {}; S.names = S.names || {}; S.imports = S.imports || []; }
-  ['limits','catColors'].forEach(function(k){ S[k] = S[k] || {}; }); ['goals','customCats'].forEach(function(k){ S[k] = S[k] || []; });
+  ['limits','catColors','accounts'].forEach(function(k){ S[k] = S[k] || {}; }); ['goals','customCats'].forEach(function(k){ S[k] = S[k] || []; });
   Object.keys(DEFAULT_OVERRIDES).forEach(function(k){ if (!S.overrides[k]) S.overrides[k] = DEFAULT_OVERRIDES[k]; });
   S.tx.forEach(enrich);
   P.anchor = S.tx.length ? (todayS() <= dataMax() ? todayS() : dataMax()) : todayS();
@@ -480,6 +498,6 @@ openDB().then(function(){ return dbGet('state'); }).then(function(st){
   if (!DB) toast('Хранилище браузера недоступно — данные не сохранятся после закрытия.');
   render();
 }).catch(function(e){ $('#bootmsg').textContent = 'Ошибка запуска: ' + e.message; });
-window.MR = { S: function(){ return S; }, P: P, VIEWS: VIEWS, render: render, save: save, sheet: sheet, closeSheet: closeSheet, toast: toast, chart: chart, tipStyle: tipStyle, range: range, shift: shift, label: label, inR: inR, sumSpend: sumSpend, byCat: byCat, color: color, catNames: catNames, fmtD: fmtD, parseD: parseD, ymd: ymd, todayS: todayS, dataMin: dataMin, dataMax: dataMax, coverage: coverage, rub: rub, rub0: rub0, pct: pct, esc: esc, $: $, $$: $$, opRow: opRow, opSheet: opSheet, enrich: enrich, MONTHS: MONTHS, MONTHS_G: MONTHS_G, MON_S: MON_S, WD: WD };
+window.MR = { S: function(){ return S; }, VT: VT, accOf: accOf, accLabel: accLabel, accList: accList, P: P, VIEWS: VIEWS, render: render, save: save, sheet: sheet, closeSheet: closeSheet, toast: toast, chart: chart, tipStyle: tipStyle, range: range, shift: shift, label: label, inR: inR, sumSpend: sumSpend, byCat: byCat, color: color, catNames: catNames, fmtD: fmtD, parseD: parseD, ymd: ymd, todayS: todayS, dataMin: dataMin, dataMax: dataMax, coverage: coverage, rub: rub, rub0: rub0, pct: pct, esc: esc, $: $, $$: $$, opRow: opRow, opSheet: opSheet, enrich: enrich, MONTHS: MONTHS, MONTHS_G: MONTHS_G, MON_S: MON_S, WD: WD };
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function(){});
 })();

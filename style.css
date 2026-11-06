@@ -136,3 +136,8 @@ input[type=range]{width:100%;accent-color:#141413}
 .colors{display:flex;flex-wrap:wrap;gap:8px}
 .colors button{width:30px;height:30px;border-radius:8px;border:2px solid transparent;padding:0}
 .colors button.on{border-color:var(--ink)}
+
+.accbar{display:flex;gap:6px;overflow-x:auto;justify-content:center;flex-wrap:wrap;margin:8px 0 2px}
+.accbar button{border:1px solid var(--line);background:#fff;color:var(--ink2);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;white-space:nowrap;cursor:pointer}
+.accbar button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn.sm{padding:5px 10px;font-size:13px;min-height:0}

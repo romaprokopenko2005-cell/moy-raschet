@@ -18,8 +18,8 @@ var CATS = [
   ['Цветы и подарки', '#c46b6b', /flowwow|CVETY|TSVETY|Цветы|FLOBYFLO|FLOWER/i],
   ['Развлечения', '#9b6fb0', /KASSIR|Afisha|СИНЕМА|Кинотеатр|KARO|MUSEUM|TERME|KRASNOYE OZERO|TVEL-SPORT|ARENA|WINLINE|SEVKABEL|CINEMA/i],
   ['Здоровье и красота', '#5f9e8f', /APTEKA|EAPTEKA|Аптека|ZDRAV|CLINIC/i],
-  ['Авто и топливо', '#8d7b68', /AZS|GAZPROMNEFT|RNAZK|LUKOIL|ROSNEFT/i],
-  ['Госуслуги и налоги', '#6f6f6f', /GOSUSLUGI|Госуслуг|NALOG/i],
+  ['Авто и топливо', '#8d7b68', /AZS|GAZPROMNEFT|RNAZK|LUKOIL|ROSNEFT|ZAPRAVKI|Fuel|TATNEF/i],
+  ['Госуслуги и налоги', '#6f6f6f', /GOSUSLUGI|Госуслуг|NALOG|Налоги и взносы/i],
   ['Комиссии банка', '#9a9a9a', /^Комиссия|^Плата за/i],
   ['Подписки', '#a08a4f', /^$/],
   ['Прочие покупки', '#b8b2a7', /.*/]
@@ -30,7 +30,7 @@ COLORS['Наличные'] = '#8f8a80'; COLORS['Переводы'] = '#4a4a4a';
 var NICE = [
   [/WHOOSH/i, 'Whoosh (самокаты)'], [/urent/i, 'Юрент (самокаты)'], [/YANDEX\*\d+\*SCOOTERS/i, 'Яндекс самокаты'],
   [/YANDEX\*\d+\*(GO|TAXI)$|Yandex Go/i, 'Яндекс Go (такси)'], [/YANDEX\*\d+\*(GO_)?(RUNCH|BERIZ)/i, 'Яндекс — аренда зарядки'],
-  [/YANDEX\*\d+\*DRIVE/i, 'Яндекс Драйв'], [/YANDEX\*\d+\*EDA/i, 'Яндекс Еда'], [/YANDEX\*\d+\*LAVKA/i, 'Яндекс Лавка'],
+  [/YANDEX\*\d+\*DRIVE/i, 'Яндекс Драйв'], [/YANDEX\*\d+\*ZAPRAVKI|Yandex Fuel/i, 'Яндекс Заправки'], [/YANDEX\*\d+\*EDA/i, 'Яндекс Еда'], [/YANDEX\*\d+\*LAVKA/i, 'Яндекс Лавка'],
   [/YANDEX\*\d+\*MARKET/i, 'Яндекс Маркет'], [/YANDEX\*\d+\*TRAVEL/i, 'Яндекс Путешествия'], [/YANDEX\*\d+\*(DELIVERY|DOSTAVKA)/i, 'Яндекс Доставка'],
   [/SAMOKAT/i, 'Самокат (доставка)'], [/WINELAB|Winelab/i, 'Винлаб'], [/KRASNOE|KRASNOYE&/i, 'Красное&Белое'], [/PYATEROCH|Пятероч/i, 'Пятёрочка'],
   [/DIXY|Дикси/i, 'Дикси'], [/LENTA|Лента/i, 'Лента'], [/MAGNIT|Магнит/i, 'Магнит'], [/PEREK|Перекр/i, 'Перекрёсток'], [/DELIMOBIL/i, 'Делимобиль'],
@@ -45,7 +45,7 @@ function merchant(desc){
   return raw;
 }
 function merchantRaw(desc){
-  return desc.replace(/^(Оплата в|Оплата услуг|Отмена операции оплаты|Возврат средств по оплате|Возврат покупки через СБП)\s*/,'')
+  return desc.replace(/ · .*$/, '').replace(/^(Оплата в|Оплата услуг|Отмена операции оплаты|Возврат средств по оплате|Возврат покупки через СБП)\s*/,'')
     .replace(/\s+(SANKT-?|Sankt|St Petersburg|ST PETERSBURG|MOSCOW|Moscow|Moskva|MOSKVA|G\. ?MOSKVA|g\. Moskva|G\.Moskva|SPb RUS|RUS$).*$/,'')
     .replace(/\s+RUS$/,'').trim() || desc;
 }
@@ -55,7 +55,7 @@ function kindOf(d, amount){
     if (/кэшбэк|Кэшбэк/i.test(d)) return 'cashback';
     if (/^Внесение наличных|^Пополнение\. ATM/.test(d)) return 'cash_in';
     if (/^Перевод себе/.test(d)) return 'self';
-    if (/Выплата за сделку|G2G|от организации/.test(d)) return 'income';
+    if (/Выплата за сделку|G2G|от организации|^Оплата от клиента/.test(d)) return 'income';
     return 'transfer_in';
   }
   if (/^Оплата в|^Оплата услуг/.test(d)) return 'purchase';
@@ -72,6 +72,10 @@ function category(desc){
 }
 function counterparty(d){
   var m;
+  if ((m = d.match(/^(?:Платёж|Поступление|Оплата от клиента): (.+?) · /))) return m[1];
+  if (/^Оплата услуг Налоги и взносы/.test(d)) return 'Налоги и взносы';
+  if (/^Комиссия банка/.test(d)) return 'Комиссии банка';
+  if (/^Внесение наличных/.test(d)) return 'Наличные';
   if ((m = d.match(/номеру телефона\s*(\+?\d[\d\s-]{9,})/))) return 'Телефон ' + m[1].replace(/\s/g,'');
   if ((m = d.match(/договор[а]?\s+(\d{6,})/))) return 'Договор ' + m[1];
   if ((m = d.match(/карты\s+\d+\*+(\d{4})/))) return 'Карта ••' + m[1];

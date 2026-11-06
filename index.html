@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Мой расчёт</title>
+<meta name="theme-color" content="#f6f4ef">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Мой расчёт">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="boot" class="boot">
+  <h1>Мой расчёт</h1>
+  <p id="bootmsg">Загрузка…</p>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="brand"><span class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Мой расчёт</div>
+    <button id="today" class="today">Сегодня</button>
+  </header>
+
+  <section id="periodBar" class="period">
+    <div class="seg" role="tablist" aria-label="Период">
+      <button data-mode="day">День</button><button data-mode="week">Неделя</button><button data-mode="month">Месяц</button><button data-mode="year">Год</button><button data-mode="all">Всё</button>
+    </div>
+    <div class="nav">
+      <button id="prev" class="arrow" aria-label="Предыдущий период">‹</button>
+      <div id="plabel" class="plabel"></div>
+      <button id="next" class="arrow" aria-label="Следующий период">›</button>
+    </div>
+  </section>
+
+  <main>
+    <section id="v-overview" class="view"></section>
+    <section id="v-transfers" class="view" hidden></section>
+    <section id="v-ops" class="view" hidden></section>
+    <section id="v-data" class="view" hidden></section>
+  </main>
+
+  <p class="ver">Версия 10 · данные хранятся только на этом устройстве</p>
+  <nav class="tabs" aria-label="Разделы">
+    <button data-view="overview" class="on"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Обзор</button>
+    <button data-view="transfers"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h14l-3-3M20 16H6l3 3"/></svg>Переводы</button>
+    <button data-view="ops"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M5 12h14M5 17h9"/></svg>Операции</button>
+    <button data-view="data"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Выписки</button>
+  </nav>
+</div>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet-card" role="dialog" aria-modal="true">
+    <button class="sheet-x" data-close aria-label="Закрыть">×</button>
+    <div id="sheetBody"></div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+window.onerror=function(m){var b=document.getElementById('bootmsg');if(b){document.getElementById('boot').hidden=false;b.textContent='Ошибка: '+m+'. Обновите страницу.';}};
+</script>
+<script src="vendor/chart.js"></script>
+<script src="vendor/pdf.min.js"></script>
+<script src="categories.js"></script>
+<script src="parser.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

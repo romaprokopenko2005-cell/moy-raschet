@@ -178,3 +178,12 @@ input[type=range]{width:100%;accent-color:#141413}
 .hint .name b{font-family:ui-monospace,Menlo,monospace;font-size:14px}
 .cbox{position:relative;width:100%}
 .td.up{color:var(--neg)}.td.down{color:var(--pos)}
+/* v13-2: no horizontal shift on iPhone */
+html,body{overflow-x:hidden;max-width:100%;overscroll-behavior-x:none}
+body{position:relative;width:100%}
+main,.top,.period{overflow-x:clip;box-sizing:border-box;width:100%}
+main{max-width:960px}
+.grid>*,.card,.row>*,.kv>*{min-width:0}
+canvas{max-width:100%!important}
+.card,.sbox{overflow-wrap:anywhere}
+input,select,textarea{font-size:16px!important}

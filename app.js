@@ -464,7 +464,8 @@ $('#next').onclick = function(){ P.anchor = shift(P.mode, P.anchor, 1); render()
 $('#today').onclick = function(){ P.mode = 'day'; P.anchor = todayS(); if (P.view === 'data') P.view = 'overview'; render(); };
 $$('.tabs button').forEach(function(b){ b.onclick = function(){ P.view = b.dataset.view; render(); window.scrollTo(0, 0); }; });
 var sx = null;
-document.addEventListener('touchstart', function(e){ sx = e.target.closest('canvas,.sheet,.chips,input') ? null : [e.touches[0].clientX, e.touches[0].clientY]; }, { passive: true });
+function hScrollable(el){ for (; el && el !== document.body; el = el.parentElement){ if (el.scrollWidth > el.clientWidth + 2){ var o = getComputedStyle(el).overflowX; if (o === 'auto' || o === 'scroll') return true; } } return false; }
+document.addEventListener('touchstart', function(e){ sx = (e.target.closest('canvas,.sheet,.chips,.carousel,.heat,.toggle,input,textarea,select') || hScrollable(e.target)) ? null : [e.touches[0].clientX, e.touches[0].clientY]; }, { passive: true });
 document.addEventListener('touchend', function(e){ if (!sx || P.mode === 'all' || P.view === 'data' || !$('#sheet').hidden) return; var dx = e.changedTouches[0].clientX - sx[0], dy = e.changedTouches[0].clientY - sx[1]; if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 2){ var btn = dx < 0 ? $('#next') : $('#prev'); if (!btn.disabled) btn.click(); } }, { passive: true });
 
 /* ---------- запуск ---------- */

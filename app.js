@@ -128,8 +128,10 @@ function renderPeriod(){
   $('#next').disabled = all || range(P.mode, P.anchor).e >= (todayS() > dataMax() ? todayS() : dataMax());
   var isToday = P.mode === 'day' && P.anchor === todayS();
   $('#today').classList.toggle('is', isToday);
-  $('#periodBar').hidden = P.view === 'data';
-  var al = accList(), ab = $('#accBar');
+  var al = accList(), ab = $('#accBar'), onlyAcc = P.view === 'search' || (P.view === 'insights' && P.amode !== 'period');
+  $('#periodBar').hidden = P.view === 'data' || (onlyAcc && al.length < 2);
+  $('#periodBar').classList.toggle('only-acc', onlyAcc);
+  $('#goSearch').classList.toggle('on', P.view === 'search');
   ab.hidden = al.length < 2 || P.view === 'data';
   if (!ab.hidden) ab.innerHTML = [{ id: 'all', label: 'Все счета' }].concat(al).map(function(a){ return '<button data-acc="' + esc(a.id) + '" class="' + ((S.accSel || 'all') === a.id ? 'on' : '') + '">' + esc(a.label) + '</button>'; }).join('');
   $('#goData').classList.toggle('on', P.view === 'data');
@@ -484,7 +486,7 @@ $$('.tabs button').forEach(function(b){ b.onclick = function(){ P.view = b.datas
 var sx = null;
 function hScrollable(el){ for (; el && el !== document.body; el = el.parentElement){ if (el.scrollWidth > el.clientWidth + 2){ var o = getComputedStyle(el).overflowX; if (o === 'auto' || o === 'scroll') return true; } } return false; }
 document.addEventListener('touchstart', function(e){ sx = (e.target.closest('canvas,.sheet,.chips,.carousel,.heat,.toggle,input,textarea,select') || hScrollable(e.target)) ? null : [e.touches[0].clientX, e.touches[0].clientY]; }, { passive: true });
-document.addEventListener('touchend', function(e){ if (!sx || P.mode === 'all' || P.view === 'data' || !$('#sheet').hidden) return; var dx = e.changedTouches[0].clientX - sx[0], dy = e.changedTouches[0].clientY - sx[1]; if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 2){ var btn = dx < 0 ? $('#next') : $('#prev'); if (!btn.disabled) btn.click(); } }, { passive: true });
+document.addEventListener('touchend', function(e){ if (!sx || P.mode === 'all' || P.view === 'data' || $('#periodBar').classList.contains('only-acc') || !$('#sheet').hidden) return; var dx = e.changedTouches[0].clientX - sx[0], dy = e.changedTouches[0].clientY - sx[1]; if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 2){ var btn = dx < 0 ? $('#next') : $('#prev'); if (!btn.disabled) btn.click(); } }, { passive: true });
 
 /* ---------- запуск ---------- */
 openDB().then(function(){ return dbGet('state'); }).then(function(st){
@@ -498,6 +500,6 @@ openDB().then(function(){ return dbGet('state'); }).then(function(st){
   if (!DB) toast('Хранилище браузера недоступно — данные не сохранятся после закрытия.');
   render();
 }).catch(function(e){ $('#bootmsg').textContent = 'Ошибка запуска: ' + e.message; });
-window.MR = { S: function(){ return S; }, VT: VT, accOf: accOf, accLabel: accLabel, accList: accList, P: P, VIEWS: VIEWS, render: render, save: save, sheet: sheet, closeSheet: closeSheet, toast: toast, chart: chart, tipStyle: tipStyle, range: range, shift: shift, label: label, inR: inR, sumSpend: sumSpend, byCat: byCat, color: color, catNames: catNames, fmtD: fmtD, parseD: parseD, ymd: ymd, todayS: todayS, dataMin: dataMin, dataMax: dataMax, coverage: coverage, rub: rub, rub0: rub0, pct: pct, esc: esc, $: $, $$: $$, opRow: opRow, opSheet: opSheet, enrich: enrich, MONTHS: MONTHS, MONTHS_G: MONTHS_G, MON_S: MON_S, WD: WD };
+window.MR = { S: function(){ return S; }, keyOf: keyOf, VT: VT, accOf: accOf, accLabel: accLabel, accList: accList, P: P, VIEWS: VIEWS, render: render, save: save, sheet: sheet, closeSheet: closeSheet, toast: toast, chart: chart, tipStyle: tipStyle, range: range, shift: shift, label: label, inR: inR, sumSpend: sumSpend, byCat: byCat, color: color, catNames: catNames, fmtD: fmtD, parseD: parseD, ymd: ymd, todayS: todayS, dataMin: dataMin, dataMax: dataMax, coverage: coverage, rub: rub, rub0: rub0, pct: pct, esc: esc, $: $, $$: $$, opRow: opRow, opSheet: opSheet, enrich: enrich, MONTHS: MONTHS, MONTHS_G: MONTHS_G, MON_S: MON_S, WD: WD };
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function(){});
 })();

@@ -27,7 +27,24 @@ var CATS = [
 var COLORS = {}; CATS.forEach(function(c){ COLORS[c[0]] = c[1]; });
 COLORS['Наличные'] = '#8f8a80'; COLORS['Переводы'] = '#4a4a4a';
 
+var NICE = [
+  [/WHOOSH/i, 'Whoosh (самокаты)'], [/urent/i, 'Юрент (самокаты)'], [/YANDEX\*\d+\*SCOOTERS/i, 'Яндекс самокаты'],
+  [/YANDEX\*\d+\*(GO|TAXI)$|Yandex Go/i, 'Яндекс Go (такси)'], [/YANDEX\*\d+\*(GO_)?(RUNCH|BERIZ)/i, 'Яндекс — аренда зарядки'],
+  [/YANDEX\*\d+\*DRIVE/i, 'Яндекс Драйв'], [/YANDEX\*\d+\*EDA/i, 'Яндекс Еда'], [/YANDEX\*\d+\*LAVKA/i, 'Яндекс Лавка'],
+  [/YANDEX\*\d+\*MARKET/i, 'Яндекс Маркет'], [/YANDEX\*\d+\*TRAVEL/i, 'Яндекс Путешествия'], [/YANDEX\*\d+\*(DELIVERY|DOSTAVKA)/i, 'Яндекс Доставка'],
+  [/SAMOKAT/i, 'Самокат (доставка)'], [/WINELAB|Winelab/i, 'Винлаб'], [/KRASNOE|KRASNOYE&/i, 'Красное&Белое'], [/PYATEROCH|Пятероч/i, 'Пятёрочка'],
+  [/DIXY|Дикси/i, 'Дикси'], [/LENTA|Лента/i, 'Лента'], [/MAGNIT|Магнит/i, 'Магнит'], [/PEREK|Перекр/i, 'Перекрёсток'], [/DELIMOBIL/i, 'Делимобиль'],
+  [/BERI ?ZARYAD/i, 'Бери заряд'], [/Steam/i, 'Steam'], [/OZON|Озон/i, 'Ozon'], [/^AVITO/i, 'Авито'], [/METRO TPP/i, 'Метро'], [/AVTOBUSNYJ/i, 'Автобус'],
+  [/LYUDI ?LYUBYAT|Люди Любят/i, 'Люди любят (пекарня)'], [/KHLEBNIK/i, 'Хлебник'], [/BUSHE|Буше/i, 'Буше'], [/Додо|DODO/i, 'Додо Пицца'],
+  [/Vkusno|VKUSNO/i, 'Вкусно — и точка'], [/NOVOCHERKASSKAYASMA|НовочеркасскаяСМА/i, 'Новочеркасская СМА'], [/ROSAL|РосАл/i, 'РосАл продукты'],
+  [/Yota/i, 'Yota'], [/MTS/i, 'МТС'], [/MegaFon/i, 'МегаФон'], [/TUTU|Tutu/i, 'Туту.ру'], [/UPPETIT/i, 'Uppetit'], [/^AM( |_|$)|^АМ( |_|$)/, 'АМ']
+];
 function merchant(desc){
+  var raw = merchantRaw(desc);
+  for (var i = 0; i < NICE.length; i++) if (NICE[i][0].test(raw)) return NICE[i][1];
+  return raw;
+}
+function merchantRaw(desc){
   return desc.replace(/^(Оплата в|Оплата услуг|Отмена операции оплаты|Возврат средств по оплате|Возврат покупки через СБП)\s*/,'')
     .replace(/\s+(SANKT-?|Sankt|St Petersburg|ST PETERSBURG|MOSCOW|Moscow|Moskva|MOSKVA|G\. ?MOSKVA|g\. Moskva|G\.Moskva|SPb RUS|RUS$).*$/,'')
     .replace(/\s+RUS$/,'').trim() || desc;
@@ -49,7 +66,7 @@ function kindOf(d, amount){
   return 'transfer_out';
 }
 function category(desc){
-  var m = merchant(desc);
+  var m = merchantRaw(desc);
   for (var i = 0; i < CATS.length; i++){ if (CATS[i][2].test(m) || CATS[i][2].test(desc)) return CATS[i][0]; }
   return 'Прочие покупки';
 }

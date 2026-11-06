@@ -26,7 +26,7 @@ function openDB(){
 function dbGet(k){ return new Promise(function(res){ if(!DB) return res(mem[k]); var t = DB.transaction('kv').objectStore('kv').get(k); t.onsuccess = function(){ res(t.result); }; t.onerror = function(){ res(undefined); }; }); }
 function dbSet(k, v){ return new Promise(function(res, rej){ if(!DB){ mem[k] = v; return res(); } var tr = DB.transaction('kv', 'readwrite'); tr.objectStore('kv').put(v, k); tr.oncomplete = function(){ res(); }; tr.onerror = function(){ rej(tr.error); }; }); }
 
-var S = { tx: [], rules: {}, overrides: {}, names: {}, imports: [] };
+var S = { tx: [], rules: {}, overrides: {}, names: {}, imports: [], limits: {}, goals: [], customCats: [], catColors: {} };
 var DEFAULT_OVERRIDES = {};
 function preset(t){ return t.date === '2026-11-02' && t.time === '07:52' && t.amount === -990 && /Сервисы Яндекса/.test(t.desc) ? 'Подписки' : null; }
 function save(){ return dbSet('state', S).catch(function(e){ toast('Не удалось сохранить: ' + e); }); }
@@ -94,7 +94,8 @@ function byCat(list){
   list.forEach(function(t){ if (t.spend) m[t.cat] = (m[t.cat] || 0) + t.spend; });
   return Object.keys(m).map(function(k){ return { cat: k, v: m[k] }; }).filter(function(x){ return Math.abs(x.v) > 0.004; }).sort(function(a, b){ return b.v - a.v; });
 }
-function color(c){ return Cat.COLORS[c] || '#999'; }
+function color(c){ if (S.catColors && S.catColors[c]) return S.catColors[c]; var u = (S.customCats || []).filter(function(x){ return x.name === c; })[0]; return u ? u.color : (Cat.COLORS[c] || '#999'); }
+function catNames(){ return Cat.CATS.map(function(c){ return c[0]; }).concat((S.customCats || []).map(function(c){ return c.name; })); }
 
 /* ---------- графики ---------- */
 var charts = {};
@@ -122,13 +123,15 @@ function renderPeriod(){
   var isToday = P.mode === 'day' && P.anchor === todayS();
   $('#today').classList.toggle('is', isToday);
   $('#periodBar').hidden = P.view === 'data';
+  $('#goData').classList.toggle('on', P.view === 'data');
 }
+var VIEWS = {};
 function render(){
   renderPeriod();
   $$('.tabs button').forEach(function(b){ b.classList.toggle('on', b.dataset.view === P.view); });
   $$('.view').forEach(function(v){ v.hidden = v.id !== 'v-' + P.view; });
   if (!S.tx.length && P.view !== 'data'){ renderEmpty(); return; }
-  ({ overview: renderOverview, transfers: renderTransfers, ops: renderOps, data: renderData })[P.view]();
+  (VIEWS[P.view] || renderOverview)();
 }
 function renderEmpty(){
   $('#v-' + P.view).innerHTML = '<div class="card welcome stack"><h1>Добавьте первую выписку</h1>' +
@@ -340,7 +343,7 @@ function renderOps(){
 }
 function opSheet(id){
   var t = S.tx.filter(function(x){ return x.id === id; })[0]; if (!t) return;
-  var opts = Cat.CATS.map(function(c){ return c[0]; }).concat(['Наличные', 'Переводы']);
+  var opts = catNames().concat(['Наличные', 'Переводы']);
   var same = S.tx.filter(function(x){ return x.merchant === t.merchant && x.spend; }).length;
   sheet('<h3>' + esc(t.merchant) + '</h3><p class="muted">' + fmtD(t.date) + ', ' + t.time + ' · карта ' + esc(t.card) + '</p>' +
     '<div style="font-size:30px;font-weight:700;margin:8px 0" class="' + (t.amount > 0 ? 'pos' : '') + '">' + rub(t.amount, true) + '</div>' +
@@ -375,7 +378,7 @@ function renderData(){
   $('#bImp').onchange = function(){ if (this.files[0]) importBackup(this.files[0]); this.value = ''; };
   $('#wipe').onclick = function(){
     sheet('<h3>Удалить все данные?</h3><p class="muted">Операции, категории и подписи будут удалены с этого устройства. Отменить нельзя.</p><div class="stack"><button class="btn danger" id="wipeY">Да, удалить</button><button class="btn ghost" data-close>Отмена</button></div>');
-    $('#wipeY').onclick = function(){ S = { tx: [], rules: {}, overrides: Object.assign({}, DEFAULT_OVERRIDES), names: {}, imports: [] }; save(); closeSheet(); render(); toast('Данные удалены'); };
+    $('#wipeY').onclick = function(){ S = { tx: [], rules: {}, overrides: {}, names: {}, imports: [], limits: {}, goals: [], customCats: [], catColors: {} }; save(); closeSheet(); render(); toast('Данные удалены'); };
   };
   if (navigator.storage && navigator.storage.persisted) navigator.storage.persisted().then(function(p){ var e = $('#persist'); if (e) e.textContent = p ? 'Хранилище защищено от автоматической очистки.' : 'Совет: добавьте приложение на экран «Домой» — так данные надёжнее сохраняются.'; });
 }
@@ -414,7 +417,7 @@ function commitImport(){
 function b64(buf){ var s = '', a = new Uint8Array(buf); for (var i = 0; i < a.length; i += 8192) s += String.fromCharCode.apply(null, a.subarray(i, i + 8192)); return btoa(s); }
 function unb64(s){ var b = atob(s), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
 function keyFrom(pw, salt){ var enc = new TextEncoder(); return crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveKey']).then(function(k){ return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 250000, hash: 'SHA-256' }, k, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']); }); }
-function slim(){ return { v: 1, tx: S.tx.map(function(t){ return { id: t.id, date: t.date, time: t.time, amount: t.amount, desc: t.desc, card: t.card }; }), rules: S.rules, overrides: S.overrides, names: S.names, imports: S.imports }; }
+function slim(){ return { v: 1, tx: S.tx.map(function(t){ return { id: t.id, date: t.date, time: t.time, amount: t.amount, desc: t.desc, card: t.card }; }), rules: S.rules, overrides: S.overrides, names: S.names, imports: S.imports, limits: S.limits, goals: S.goals, customCats: S.customCats, catColors: S.catColors }; }
 function exportBackup(){
   var pw = $('#bpw').value, json = JSON.stringify(slim());
   var done = function(text){
@@ -445,11 +448,15 @@ function importBackup(file){
     add.forEach(enrich); S.tx = S.tx.concat(add);
     Object.assign(S.rules, o.rules || {}); Object.assign(S.overrides, o.overrides || {}); Object.assign(S.names, o.names || {});
     S.imports = S.imports.concat(o.imports || []);
+    Object.assign(S.limits, o.limits || {}); Object.assign(S.catColors, o.catColors || {});
+    (o.goals || []).forEach(function(g){ if (!S.goals.some(function(x){ return x.id === g.id; })) S.goals.push(g); });
+    (o.customCats || []).forEach(function(g){ if (!S.customCats.some(function(x){ return x.name === g.name; })) S.customCats.push(g); });
     S.tx.forEach(enrich);
     return save().then(function(){ render(); toast('Восстановлено: добавлено ' + add.length + ' операций'); });
   }).catch(function(e){ toast(e.message || String(e)); });
 }
 
+VIEWS.overview = renderOverview; VIEWS.transfers = renderTransfers; VIEWS.ops = renderOps; VIEWS.data = renderData;
 /* ---------- события ---------- */
 $$('.seg button').forEach(function(b){ b.onclick = function(){ P.mode = b.dataset.mode; render(); }; });
 $('#prev').onclick = function(){ P.anchor = shift(P.mode, P.anchor, -1); render(); };
@@ -463,6 +470,7 @@ document.addEventListener('touchend', function(e){ if (!sx || P.mode === 'all' |
 /* ---------- запуск ---------- */
 openDB().then(function(){ return dbGet('state'); }).then(function(st){
   if (st && st.tx){ S = st; S.rules = S.rules || {}; S.overrides = S.overrides || {}; S.names = S.names || {}; S.imports = S.imports || []; }
+  ['limits','catColors'].forEach(function(k){ S[k] = S[k] || {}; }); ['goals','customCats'].forEach(function(k){ S[k] = S[k] || []; });
   Object.keys(DEFAULT_OVERRIDES).forEach(function(k){ if (!S.overrides[k]) S.overrides[k] = DEFAULT_OVERRIDES[k]; });
   S.tx.forEach(enrich);
   P.anchor = S.tx.length ? (todayS() <= dataMax() ? todayS() : dataMax()) : todayS();
@@ -471,5 +479,6 @@ openDB().then(function(){ return dbGet('state'); }).then(function(st){
   if (!DB) toast('Хранилище браузера недоступно — данные не сохранятся после закрытия.');
   render();
 }).catch(function(e){ $('#bootmsg').textContent = 'Ошибка запуска: ' + e.message; });
+window.MR = { S: function(){ return S; }, P: P, VIEWS: VIEWS, render: render, save: save, sheet: sheet, closeSheet: closeSheet, toast: toast, chart: chart, tipStyle: tipStyle, range: range, shift: shift, label: label, inR: inR, sumSpend: sumSpend, byCat: byCat, color: color, catNames: catNames, fmtD: fmtD, parseD: parseD, ymd: ymd, todayS: todayS, dataMin: dataMin, dataMax: dataMax, coverage: coverage, rub: rub, rub0: rub0, pct: pct, esc: esc, $: $, $$: $$, opRow: opRow, opSheet: opSheet, enrich: enrich, MONTHS: MONTHS, MONTHS_G: MONTHS_G, MON_S: MON_S, WD: WD };
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function(){});
 })();
